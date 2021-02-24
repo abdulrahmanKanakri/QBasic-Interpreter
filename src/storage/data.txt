@@ -1,0 +1,17 @@
+n = 14
+text$ = "some example text"
+PRINT n
+PRINT "Hey "; text$; ", SHAY"; 5325;"75i___-2939*-*-!@$@%!%$&^%*'SDE"
+PRINT "bees"
+
+PRINT "HEY MEEEZ"
+a = 3
+b% = -a
+PRINT a; "   "; b%
+
+n = 1
+DO UNTIL n > 7
+PRINT "Enter n."
+PRINT "When you want to quit, press 0."
+INPUT n
+LOOP

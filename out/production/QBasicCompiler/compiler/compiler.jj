@@ -1,0 +1,418 @@
+options {
+    STATIC = false;
+    JAVA_UNICODE_ESCAPE = true;
+}
+
+PARSER_BEGIN(QBasic)
+package compiler;
+
+import enums.*;
+import nodes.blocks.*;
+import nodes.variables.*;
+import nodes.*;
+import utils.*;
+import java.io.FileInputStream;
+
+public class QBasic {
+    public static void main(String[] args) throws ParseException {
+        try {
+//            QBasic parser = new QBasic(System.in);
+            QBasic parser = new QBasic(new FileInputStream(Paths.FILE));
+            parser.start();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+PARSER_END(QBasic)
+
+// TODO: add SQR, ABS, SIN, COS
+// FIXME: comment issue
+
+/*
+* expression stmt   (done)
+* assign stmt       (done)
+* print stmt        (done)
+* input stmt        (done)
+* block stmt        (done)
+* comment stmt      (done)
+* if stmt           (done)
+* for stmt          (done)
+* do while stmt     (done)
+* while stmt        (done)
+* until stmt        (done)
+* END stmt          (done)
+* */
+
+SKIP : {
+    "\t" | " "
+}
+
+SPECIAL_TOKEN :
+{
+  <SINGLE_LINE_COMMENT: "'" (~["\n","\r"])* ("\n"|"\r"|"\r\n")?>
+}
+
+// Reserved Keywords
+TOKEN : {
+    < PRINT: "PRINT " > |
+    < INPUT: "INPUT " > |
+    < ELSE_IF: "ELSE IF " > |
+    < IF: "IF " > |
+    < THEN: ("THEN" | "THEN ") > |
+    < ELSE: ("ELSE " | "ELSE") > |
+    < ENDIF: "END IF" > |
+    < FOR: "FOR " > |
+    < NEXT: "NEXT " > |
+    < TO: " TO " > |
+    < STEP: " STEP " > |
+    < DO: ("DO" | "DO ") > |
+    < LOOP: ("LOOP" | "LOOP ") > |
+    < WHILE: "WHILE " > |
+    < UNTIL: "UNTIL " > |
+    < END: "END" >
+}
+
+// Operators
+TOKEN : {
+    < PLUS: "+" | "-" > |
+    < MUL: "/" | "*" | "MOD" | "\\" > |
+    < POW: "^" > |
+    < SQR: "SQR" > |
+    < AND: "AND" > |
+    < OR: "OR" > |
+    < CONDITIONAL_OPS: "<>" | "=" | ">" | ">=" | "<" | "<=" >
+}
+
+TOKEN : {
+    < #LETTER: ["a"-"z"] | ["A"-"Z"] > |
+    < #DIGIT: ["0"-"9"] > |
+    < #INT: (<DIGIT>)+ > |
+    < VAR_TYPE: "%" | "&" | "#" | "!" | "$" > |
+    < STRING_VAR: <VAR> "$" >|
+    < NUMBER_VAR: <VAR> ("%" | "&" | "#" | "!")? >|
+    < #VAR: <LETTER> (<LETTER> | <DIGIT> | <UNDERSCORE>)* > |
+    < NUM: <INT> ("." <INT>)? > |
+    < STRING: "\"" (~["\r","\n","\""])* "\"" > |
+    < ENDL: ("\n" | "\r" | "\r\n")+ > |
+    < UNDERSCORE: "_" > |
+    < SEMICOLON: ";" > |
+    < RP: ")" > |
+    < LP: "(" >
+}
+
+void start(): {
+    Node node, n2 = null;
+    Context c = new Context();
+} {
+     (<ENDL>)? node = containerStmt() {
+        node.run(c);
+     }
+}
+
+// Start: Expressions //
+ExpressionNode expressionStmt(): {
+    ExpressionNode n = new ExpressionNode();
+} {
+    n = expressionOR() {
+        return n;
+    }
+}
+
+ExpressionNode expressionOR(): {
+    Token t = null;
+    ExpressionNode n1, n2 = null;
+} {
+    n1 = expressionAND() (t = <OR> n2 = expressionOR())? {
+        if(t == null) return n1;
+        OperationNode node = new OperationNode(t.image);
+        node.addChild(n1);
+        node.addChild(n2);
+        return node;
+    }
+}
+
+ExpressionNode expressionAND(): {
+    Token t = null;
+    ExpressionNode n1, n2 = null;
+} {
+    n1 = expressionCON() (t = <AND> n2 = expressionAND())? {
+        if(t == null) return n1;
+        OperationNode node = new OperationNode(t.image);
+        node.addChild(n1);
+        node.addChild(n2);
+        return node;
+    }
+}
+
+ExpressionNode expressionCON(): {
+    Token t = null;
+    ExpressionNode n1, n2 = null;
+} {
+    n1 = expressionPlus() (t = <CONDITIONAL_OPS> n2 = expressionCON() )? {
+        if(t == null) return n1;
+        OperationNode node = new OperationNode(t.image);
+        node.addChild(n1);
+        node.addChild(n2);
+        return node;
+    }
+}
+
+ExpressionNode expressionPlus(): {
+    Token t = null;
+    ExpressionNode n1, n2 = null;
+} {
+    n1 = expressionMul() (t = <PLUS> n2 = expressionPlus())? {
+        if(t == null) return n1;
+        OperationNode node = new OperationNode(t.image);
+        node.addChild(n1);
+        node.addChild(n2);
+        return node;
+    }
+}
+
+ExpressionNode expressionMul(): {
+    Token t = null;
+    ExpressionNode n1, n2 = null;
+} {
+    n1 = expressionPow() (t = <MUL> n2 = expressionMul())? {
+        if(t == null) return n1;
+        OperationNode node = new OperationNode(t.image);
+        node.addChild(n1);
+        node.addChild(n2);
+        return node;
+    }
+}
+
+ExpressionNode expressionPow(): {
+    Token t = null;
+    ExpressionNode n1, n2 = null;
+} {
+    n1 = expressionSign() (t = <POW> n2 = expressionPow())? {
+        if(t == null) return n1;
+        OperationNode node = new OperationNode(t.image);
+        node.addChild(n1);
+        node.addChild(n2);
+        return node;
+    }
+}
+
+ExpressionNode expressionSign(): {
+    Token t = null;
+    ExpressionNode n;
+} {
+    (t = <PLUS>)? n = expressionNum() {
+        if(t == null) return n;
+        OperationNode node = new OperationNode(t.image);
+        node.addChild(new NumberNode("0"));
+        node.addChild(n);
+        return node;
+    }
+}
+
+ExpressionNode expressionNum(): {
+    Token t = null;
+    ExpressionNode n = null;
+} {
+    ( t = <NUM> | t = <NUMBER_VAR> | t = <STRING> | t = <STRING_VAR> ) {
+    if(Util.isNumeric(t.image)) {
+        return new NumberNode(t.image);
+    } else if(Util.isString(t.image)) {
+        return new StringNode(t.image);
+    } else if(Util.getVariableType(t.image).equals(VarType.STRING)) {
+        return new StringVariableNode(t.image);
+    } else {
+        return new NumberVariableNode(t.image);
+    }
+} |
+    <LP> n = expressionOR() <RP> {
+        return n;
+    }
+}
+// End: Expressions //
+
+// Start: print stmt //
+PrintNode printStmt(): {
+    PrintNode node = new PrintNode();
+    ExpressionNode n1, n2 = null;
+} {
+    <PRINT> n1 = expressionStmt() {
+        node.addChild(n1);
+    } (<SEMICOLON> n2 = expressionStmt() {
+        if(n2 != null)
+            node.addChild(n2);
+    })* {
+        return node;
+    }
+}
+// End: print stmt //
+
+// Start: assign stmt //
+AssignNode assignStmt(): {
+    Token t1, op;
+    ExpressionNode n;
+    AssignNode assignNode = new AssignNode();
+} {
+    (t1 = <NUMBER_VAR> | t1 = <STRING_VAR>) op = <CONDITIONAL_OPS> n = expressionStmt() {
+        if(!op.image.equals("=")) throw new ParseException("invalid assignment");
+        if(Util.getVariableType(t1.image).equals(VarType.STRING)) {
+            assignNode.addChild(new StringVariableNode(t1.image));
+        } else {
+            assignNode.addChild(new NumberVariableNode(t1.image));
+        }
+        assignNode.addChild(n);
+        return assignNode;
+    }
+}
+// End: assign stmt //
+
+// Start: input stmt //
+InputNode inputStmt(): {
+    Token t1 = null, t2 = null;
+    InputNode node = new InputNode();
+} {
+    <INPUT> (t1 = <STRING> <SEMICOLON>)? {
+        if(t1 != null) node.addChild(new StringNode(t1.image));
+    } (t2 = <NUMBER_VAR> | t2 = <STRING_VAR>) {
+        if(Util.getVariableType(t2.image).equals(VarType.STRING)) {
+            node.addChild(new StringVariableNode(t2.image));
+        } else {
+            node.addChild(new NumberVariableNode(t2.image));
+        }
+        return node;
+    }
+}
+// End: input stmt //
+
+// Start: if stmt //
+IfNode ifStmt(): {
+    IfNode ifNode = new IfNode();
+    ExpressionNode e1 = null, e2 = null;
+    ContainerNode container1 = null, container2 = null, container3 = null;
+} {
+    <IF> e1 = expressionStmt() <THEN> (<ENDL>)? {
+        ifNode.addChild(e1);
+    } container1 = containerStmt() {
+        ifNode.addChild(container1);
+    } (<ELSE_IF> e2 = expressionStmt() <THEN> (<ENDL>)? {
+        ifNode.addChild(e2);
+    } container2 = containerStmt() {
+        ifNode.addChild(container2);
+    })* (<ELSE> (<ENDL>)? container3 = containerStmt() {
+        ifNode.addChild(container3);
+    })?
+    <ENDIF> {
+        return ifNode;
+    }
+}
+// End: if stmt //
+
+// Start: for stmt //
+ForLoopNode forLoopStmt(): {
+    Token cnt;
+    ExpressionNode to, step = null;
+    AssignNode assign = null;
+    ContainerNode container = null;
+    ForLoopNode forLoopNode = new ForLoopNode();
+} {
+    <FOR> assign = assignStmt() {
+        forLoopNode.addChild(assign);
+    } <TO> to = expressionStmt() {
+        forLoopNode.addChild(to);
+    } (<STEP> step = expressionStmt() {
+        forLoopNode.addChild(step);
+    })? <ENDL> container = containerStmt() {
+        forLoopNode.addChild(container);
+    } <NEXT> cnt = <NUMBER_VAR> {
+        forLoopNode.addChild(new NumberVariableNode(cnt.image));
+        return forLoopNode;
+    }
+}
+// End: for stmt //
+
+// Start: do while stmt //
+DoWhileNode doWhileStmt(): {
+    ContainerNode container;
+    ExpressionNode e;
+    DoWhileNode node = new DoWhileNode();
+} {
+    <DO> <ENDL>
+    container = containerStmt() {
+        node.addChild(container);
+    } <LOOP> <WHILE> e = expressionStmt() {
+        node.addChild(e);
+        return node;
+    }
+}
+// End: do while stmt //
+
+// Start: while stmt //
+WhileNode whileStmt(): {
+    ContainerNode container;
+    ExpressionNode e;
+    WhileNode node = new WhileNode();
+} {
+     <DO> <WHILE> e = expressionStmt() {
+        node.addChild(e);
+    } <ENDL> container = containerStmt() {
+        node.addChild(container);
+    } <LOOP> {
+        return node;
+    }
+}
+// End: while stmt //
+
+// Start: until stmt //
+UntilNode untilStmt(): {
+    ContainerNode container;
+    ExpressionNode e;
+    UntilNode node = new UntilNode();
+} {
+     <DO> <UNTIL> e = expressionStmt() {
+        node.addChild(e);
+    } <ENDL> container = containerStmt() {
+        node.addChild(container);
+    } <LOOP> {
+        return node;
+    }
+}
+// End: until stmt //
+
+// END keyword
+EndNode endStmt(): {} {
+    <END> { return new EndNode(); }
+}
+
+// Start: block stmt //
+BlockNode blockStmt(): {
+    BlockNode node;
+} {
+    (
+        node = assignStmt() |
+        node = inputStmt() |
+        node = printStmt() |
+        node = ifStmt() |
+        node = forLoopStmt() |
+        LOOKAHEAD(2) node = doWhileStmt() |
+        LOOKAHEAD(2) node = whileStmt() |
+        LOOKAHEAD(2) node = untilStmt() |
+        node = endStmt()
+    ) <ENDL> {
+        return node;
+    }
+}
+// End: block stmt //
+
+// Start: container stmt //
+ContainerNode containerStmt(): {
+    ContainerNode node = new ContainerNode();
+    BlockNode child;
+} {
+    (child = blockStmt() {
+        node.addChild(child);
+    })* {
+        return node;
+    }
+}
+// End: container stmt //
